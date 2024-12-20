@@ -56,7 +56,7 @@ runs:
     - name: Run build script
       id: build_mcpack_action
       run: |
-        python build.py --buildScript ${{ inputs.buildScript }} --input ${{ inputs.input }} --output ${{ inputs.output }} --outputPattern ${{ inputs.outputPattern }}
+        python /src/build.py --buildScript ${{ inputs.buildScript }} --input ${{ inputs.input }} --output ${{ inputs.output }} --outputPattern ${{ inputs.outputPattern }}
       shell: bash
 
     # Create a GitHub release with the built artifacts
