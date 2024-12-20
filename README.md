@@ -1,4 +1,4 @@
-# mcaddon Build Action
+# build mcpack action
 
 This action compiles your addon or pack into an installable file.
 
