@@ -1,0 +1,67 @@
+---
+name: build-mcpack-action
+description: Build your mcpack
+
+inputs:
+  buildScript:
+    description: The python script to build your addon, if any.
+    required: false
+    default: "none"
+  input:
+    description: The directory to look for packs.
+    required: false
+    default: "."
+  output:
+    description: The directory to place the built artifacts
+    required: false
+    default: "dist/"
+  outputPattern:
+    description: The name of the compiled file.
+    required: false
+    default: "TYPE-NAME-VERSION.mcpack"
+
+branding:
+  color: orange
+  icon: box
+
+outputs:
+  packs:
+    description: JSON array containing the metadata of all bundled packs
+
+runs:
+  using: composite
+  steps:
+    # Set up Python environment
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.13'
+
+    # Install necessary dependencies
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install gitfiles==1.0.0 mcaddon==0.0.3 commentjson==0.9.0
+      shell: bash
+
+    # Install dependencies from requirements.txt if it exists
+    - name: Install build script dependencies
+      run: |
+        if [ -f requirements.txt ]; then
+          pip install -r requirements.txt
+        fi
+      shell: bash
+
+    # Run the build script
+    - name: Run build script
+      id: build_mcpack_action
+      run: |
+        python build.py --buildScript ${{ inputs.buildScript }} --input ${{ inputs.input }} --output ${{ inputs.output }} --outputPattern ${{ inputs.outputPattern }}
+      shell: bash
+
+    # Create a GitHub release with the built artifacts
+    - name: Create a Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ fromJSON(steps.build_mcpack_action.outputs.packs)[0].version }}
+        files: dist/*
