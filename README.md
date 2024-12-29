@@ -8,7 +8,6 @@ This action compiles your addon or pack into an installable file.
 - Automatically creates a `contents.json` file listing all files included in the pack.
 - Minifies all JSON files to reduce file size.
 - Handles behavior packs, resource packs, and skin packs.
-- Automatically excludes files specified in `.gitignore` and other temporary files.
 - Enable detailed logging for debugging purposes.
 
 ## Usage
@@ -75,6 +74,9 @@ def build():
 
     log.info("Starting pack build with args: %s", args)
 
+    # Adds output.txt to behavior pack
+    with open('behavior_pack/output.txt', 'w') as fd:
+      fd.write('Hello, World!')
 ```
 
 ## inputs
