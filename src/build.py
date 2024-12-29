@@ -10,6 +10,7 @@ import gitfiles
 import lark
 import time
 import json
+import shutil
 
 # Load .gitignore file
 gitfiles.load_gitignore()
@@ -100,7 +101,7 @@ def artifact_name(args: Namespace, pack_dir: str, pack_metadata: dict[str, str])
     data.update(pack_metadata)
     for k, v in data.items():
         name = name.replace(k.upper(), v)
-    res = os.path.join(args.output, name)
+    res = os.path.join(args.output, "libs", name)
     log.debug("\tGenerated artifact name: %s", res)
     return res
 
@@ -117,7 +118,7 @@ def compile_pack(args: Namespace, pack_dir: str, pack_metadata: dict[str, str]):
     :type pack_metadata: dict[str, str]
     """
     start = time.time()
-    fp = os.path.join(args.input, pack_dir)
+    fp = os.path.join(args.output, "tmp", pack_dir)
     zf = artifact_name(args, pack_dir, pack_metadata)
     with zipfile.ZipFile(zf, mode="w") as zip:
         log.debug("\tCreating zip file: %s", zf)
@@ -125,8 +126,8 @@ def compile_pack(args: Namespace, pack_dir: str, pack_metadata: dict[str, str]):
         for root, dirs, files in os.walk(fp):
             for f in files:
                 file = os.path.join(root, f)
-                if gitfiles.match(file):
-                    continue
+                # if gitfiles.match(file):
+                #     continue
                 with open(file, "rb") as fd:
                     data = fd.read()
                     if file.endswith((".json", ".jsonc", ".json5")):
@@ -151,7 +152,7 @@ def compile_pack(args: Namespace, pack_dir: str, pack_metadata: dict[str, str]):
     log.info("\033[92mDone in %s ms\033[0m", round(time.time() - start, 2))
 
 
-def build_script(fp: str):
+def build_script(fp: str, output: str):
     """
     Execute the build script.
 
@@ -160,14 +161,27 @@ def build_script(fp: str):
     """
     log.info("Executing build script: %s", fp)
     with open(fp) as fd:
-        script = fd.read()
+        wdir = os.getcwd()
+        script = (
+            f"import os; os.chdir({ repr(os.path.join(output, 'tmp')) })\n{ fd.read() }"
+        )
         exec_globals = {"log": logging.getLogger(os.path.basename(fp))}
         exec(script, exec_globals)
         if "build" in exec_globals:
             exec_globals["build"]()
         else:
             log.warning("No 'build' function found in the build script")
-    ...
+        os.chdir(wdir)
+
+
+def copy_tree(src, dst) -> None:
+    shutil.copytree(
+        src,
+        dst,
+        ignore=lambda dir, contents: [
+            f for f in contents if gitfiles.match(os.path.join(dir, f))
+        ],
+    )
 
 
 def main():
@@ -183,13 +197,14 @@ def main():
     parser = ArgumentParser()
     parser.add_argument("-s", "--buildScript", type=str, nargs="?")
     parser.add_argument("-i", "--input", type=str, default=".")
-    parser.add_argument("-o", "--output", type=str, default="dist/")
+    parser.add_argument("-o", "--output", type=str, default="build")
     parser.add_argument(
         "-p", "--outputPattern", type=str, default="DIRNAME-VERSION.mcpack"
     )
     parser.add_argument("-d", "--debug", action="store_true")
 
     args, unknown = parser.parse_known_args()
+    TMP = os.path.join(args.output, "tmp")
     log.info("Running with args: %s", args)
 
     # Change log level
@@ -197,21 +212,29 @@ def main():
         log.setLevel(logging.DEBUG)
 
     log.info("Creating artifact directory: %s", args.output)
+    if os.path.exists(args.output):
+        shutil.rmtree(args.output)
     os.makedirs(args.output, exist_ok=True)
+    os.makedirs(os.path.join(args.output, "libs"), exist_ok=True)
+
+    # Copy source over to build/tmp
+    copy_tree(args.input, TMP)
 
     # Execute build script
     if args.buildScript != "none" and args.buildScript:
         start = time.time()
         sys.argv = unknown
         sys.argv.insert(0, args.buildScript)
-        build_script(args.buildScript)
+        build_script(args.buildScript, args.output)
         log.info("\033[92mFinished in %s ms\033[0m", round(time.time() - start, 2))
 
     # Find all packs
-    packs = list(find_packs(args.input))
+    packs = list(find_packs(TMP))
     for pack in packs:
         log.info("Bundling pack: %s", pack[0])
         compile_pack(args, *pack)
+    if len(packs) == 0:
+        log.warning("\033[91mNo packs found: %s!\033[0m", TMP)
 
     # Add pack metadata to outputs
     outputs["packs"] = [pack[1] for pack in packs]

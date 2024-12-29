@@ -1,0 +1,3 @@
+gitfiles==1.0.0
+mcaddon==0.0.3
+commentjson==0.9.0
